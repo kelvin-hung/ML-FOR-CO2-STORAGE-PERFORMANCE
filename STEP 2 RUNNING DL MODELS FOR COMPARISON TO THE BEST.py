@@ -7,7 +7,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # --- CONFIG ---
-DATA_ROOT = "data/model-48"
+DATA_ROOT = "data/model-48" #you can change the model depend your interesting#
 N_I, N_J, N_K = 38, 45, 13
 BATCH_SIZE, EPOCHS = 2, 30
 DEVICE = "cpu"
@@ -100,5 +100,6 @@ def visualize_prediction(df_true, pred, target, timestep, model_name):
     plt.tight_layout()
     plt.savefig(f"plots/{model_name}_{target}_timestep_{timestep}.png")
     plt.close()
+
 
 
