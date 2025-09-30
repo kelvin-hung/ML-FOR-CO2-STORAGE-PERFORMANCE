@@ -1,0 +1,104 @@
+import numpy as np, pandas as pd
+import os, glob, re
+import torch, torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+# --- CONFIG ---
+DATA_ROOT = "data/model-48"
+N_I, N_J, N_K = 38, 45, 13
+BATCH_SIZE, EPOCHS = 2, 30
+DEVICE = "cpu"
+os.makedirs("plots1", exist_ok=True)
+os.makedirs("trained_models", exist_ok=True)
+TARGETS = ['Gas_Saturation', 'Pressure', 'Subsidence', 'pH']
+
+# --- Data Loading ---
+def sorted_csv():
+    files = sorted(glob.glob(f"{DATA_ROOT}/csv/ml_data_time_*.csv"),
+                   key=lambda f: int(re.search(r"ml_data_time_(\d+)_", f).group(1)))
+    return files
+
+# --- CNN3D Example ---
+class CNN3D(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super().__init__()
+        self.model = nn.Sequential(
+            nn.Conv3d(in_ch, 64, 3, padding=1), nn.ReLU(),
+            nn.Conv3d(64, 128, 3, padding=1), nn.ReLU(),
+            nn.Conv3d(128, 64, 3, padding=1), nn.ReLU(),
+            nn.Conv3d(64, out_ch, 1))
+    def forward(self, x): return self.model(x)
+
+# --- DenseNet3D ---
+class DenseNet3D(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv3d(in_ch, 64, 3, padding=1), nn.ReLU(),
+            nn.Conv3d(64, 64, 3, padding=1), nn.ReLU(),
+            nn.Conv3d(64, 128, 3, padding=1), nn.ReLU(),
+            nn.Conv3d(128, 128, 3, padding=1), nn.ReLU())
+        self.classifier = nn.Conv3d(128, out_ch, 1)
+    def forward(self, x):
+        x = self.features(x)
+        return self.classifier(x)
+
+# --- ResNet3D ---
+class ResNetBlock(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv3d(channels, channels, 3, padding=1), nn.ReLU(),
+            nn.Conv3d(channels, channels, 3, padding=1))
+        self.relu = nn.ReLU()
+    def forward(self, x):
+        return self.relu(x + self.block(x))
+
+class ResNet3D(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super().__init__()
+        self.conv_in = nn.Conv3d(in_ch, 64, 3, padding=1)
+        self.resblock = ResNetBlock(64)
+        self.conv_out = nn.Conv3d(64, out_ch, 1)
+    def forward(self, x):
+        x = nn.ReLU()(self.conv_in(x))
+        x = self.resblock(x)
+        return self.conv_out(x)
+
+
+# --- MAIN SCRIPT ---
+csv_files = sorted_csv()
+INPUT_FEATS = [c for c in pd.read_csv(csv_files[0]).columns if c not in ['i_index','j_index','k_index']+TARGETS]
+
+# CNN, DenseNet, ResNet models
+dl_models = {
+    'CNN3D': CNN3D(len(INPUT_FEATS), len(TARGETS)).to(DEVICE),
+    'DenseNet3D': DenseNet3D(len(INPUT_FEATS), len(TARGETS)).to(DEVICE),
+    'ResNet3D': ResNet3D(len(INPUT_FEATS), len(TARGETS)).to(DEVICE)
+}
+
+# Add visualization function
+def visualize_prediction(df_true, pred, target, timestep, model_name):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    true_grid = df_true[target].values.reshape(N_I, N_J)
+    pred_grid = pred.reshape(N_I, N_J)
+    cmap = 'RdYlGn_r'
+
+    ax = axes[0]
+    cax = ax.imshow(true_grid, cmap=cmap)
+    ax.set_title(f"True {target} at t={timestep}")
+    fig.colorbar(cax, ax=ax)
+
+    ax = axes[1]
+    cax = ax.imshow(pred_grid, cmap=cmap)
+    ax.set_title(f"Predicted {target} ({model_name}) at t={timestep}")
+    fig.colorbar(cax, ax=ax)
+
+    plt.tight_layout()
+    plt.savefig(f"plots/{model_name}_{target}_timestep_{timestep}.png")
+    plt.close()
+
+
