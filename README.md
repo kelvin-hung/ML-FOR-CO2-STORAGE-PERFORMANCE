@@ -1,2 +1,2 @@
-These code are used for my publications papers
-DATA WILL UPLOAD WHEN MY PAPER IS PUBLISHED
+These codes are used for supporting my submission to journal.
+DATA WILL UPLOAD WHEN MY PAPER IS finally PUBLISHED.
